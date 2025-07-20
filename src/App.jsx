@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Play, Pause, Volume2 } from 'lucide-react';
 
 const PianoChordApp = () => {
@@ -6,22 +6,45 @@ const PianoChordApp = () => {
   const [selectedCategory, setSelectedCategory] = useState('triadi');
   const [selectedChord, setSelectedChord] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
-  const [rootNote, setRootNote] = useState('C'); // Nota di partenza per trasposizione
+  const [rootNote, setRootNote] = useState('Do'); // Nota di partenza per trasposizione
   
   // Stati per animazioni e feedback visivo
   const [activeKeys, setActiveKeys] = useState(new Set());
   const [keyAnimations, setKeyAnimations] = useState(new Map());
   const audioContextRef = useRef(null);
 
-  // Tutte le note disponibili per trasposizione
-  const allNotes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  // Tutte le note disponibili per trasposizione (corrispondenti al CSV)
+  const allNotes = ['Do', 'Do#', 'Reb', 'Re', 'Re#', 'Mib', 'Mi', 'Fa', 'Fa#', 'Solb', 'Sol', 'Sol#', 'Lab', 'La', 'La#', 'Sib', 'Si'];
+  
+  // Mappa per conversione da nomi italiani a inglesi per il calcolo
+  const noteMap = {
+    'Do': 'C', 'Do#': 'C#', 'Reb': 'Db', 'Re': 'D', 'Re#': 'D#', 'Mib': 'Eb', 
+    'Mi': 'E', 'Fa': 'F', 'Fa#': 'F#', 'Solb': 'Gb', 'Sol': 'G', 'Sol#': 'G#', 
+    'Lab': 'Ab', 'La': 'A', 'La#': 'A#', 'Sib': 'Bb', 'Si': 'B'
+  };
 
-  // Funzione per trasporre una nota
+  // Mappa inversa per conversione da inglese a italiano
+  const englishToItalianMap = {
+    'C': 'Do', 'C#': 'Do#', 'Db': 'Reb', 'D': 'Re', 'D#': 'Re#', 'Eb': 'Mib',
+    'E': 'Mi', 'F': 'Fa', 'F#': 'Fa#', 'Gb': 'Solb', 'G': 'Sol', 'G#': 'Sol#',
+    'Ab': 'Lab', 'A': 'La', 'A#': 'La#', 'Bb': 'Sib', 'B': 'Si'
+  };
+
+  // Funzione per convertire una nota inglese in italiana
+  const convertNoteToItalian = (englishNote) => {
+    const noteWithoutOctave = englishNote.slice(0, -1);
+    return englishToItalianMap[noteWithoutOctave] || englishNote;
+  };
+
+  // Sistema a 12 semitoni per trasposizione corretta
+  const chromaticNotes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+  // Funzione per trasporre una nota usando il sistema cromatico standard
   const transposeNote = (note, semitones) => {
     const noteWithoutOctave = note.slice(0, -1);
     const octave = parseInt(note.slice(-1));
-    const noteIndex = allNotes.indexOf(noteWithoutOctave);
     
+    const noteIndex = chromaticNotes.indexOf(noteWithoutOctave);
     if (noteIndex === -1) return note;
     
     let newNoteIndex = (noteIndex + semitones) % 12;
@@ -30,11 +53,12 @@ const PianoChordApp = () => {
     let newOctave = octave + Math.floor((noteIndex + semitones) / 12);
     if (noteIndex + semitones < 0) newOctave--;
     
-    return allNotes[newNoteIndex] + newOctave;
+    return chromaticNotes[newNoteIndex] + newOctave;
   };
 
-  // Calcola i semitoni di trasposizione dalla nota C
-  const transpositionSemitones = allNotes.indexOf(rootNote);
+  // Calcola i semitoni di trasposizione dalla nota Do
+  const rootNoteEnglish = noteMap[rootNote] || 'C';
+  const transpositionSemitones = chromaticNotes.indexOf(rootNoteEnglish);
 
   // All piano keys for display (2 ottave complete: C3-C5)
   const pianoKeys = [
@@ -106,6 +130,14 @@ const PianoChordApp = () => {
     }
   };
 
+  // Inizializza automaticamente il primo accordo quando l'app si carica
+  useEffect(() => {
+    if (selectedChord === '' && chordDatabase[selectedCategory]) {
+      const firstChord = Object.keys(chordDatabase[selectedCategory])[0];
+      setSelectedChord(firstChord);
+    }
+  }, [selectedCategory]);
+
   const currentChords = chordDatabase[selectedCategory];
   const originalChord = currentChords[selectedChord];
   
@@ -113,32 +145,69 @@ const PianoChordApp = () => {
   const getTransposedChordName = (chordSymbol, originalChord) => {
     if (!originalChord) return { symbol: chordSymbol, name: chordSymbol };
     
-    if (rootNote === 'C') {
+    if (rootNote === 'Do') {
       return { symbol: chordSymbol, name: originalChord.name };
     }
     
-    // Sostituisce la C iniziale con la nuova nota di partenza
-    const transposedSymbol = chordSymbol.replace(/^C/, rootNote);
-    const transposedName = originalChord.name.replace(/^Do/, 
-      rootNote === 'C#' || rootNote === 'D#' || rootNote === 'F#' || rootNote === 'G#' || rootNote === 'A#' 
-        ? rootNote.replace('#', ' diesis')
-        : rootNote === 'D' ? 'Re'
-        : rootNote === 'E' ? 'Mi' 
-        : rootNote === 'F' ? 'Fa'
-        : rootNote === 'G' ? 'Sol'
-        : rootNote === 'A' ? 'La'
-        : rootNote === 'B' ? 'Si'
-        : rootNote
-    );
+    // Sostituisce la C iniziale con la nota inglese corrispondente
+    const rootNoteEnglish = noteMap[rootNote] || rootNote;
+    const transposedSymbol = chordSymbol.replace(/^C/, rootNoteEnglish);
+    const transposedName = originalChord.name.replace(/^Do/, rootNote);
     
     return { symbol: transposedSymbol, name: transposedName };
   };
 
   // Crea l'accordo trasposto
-  const currentChord = originalChord ? {
-    ...originalChord,
-    notes: originalChord.notes.map(note => transposeNote(note, transpositionSemitones))
-  } : null;
+  // Funzione per verificare se una nota è visualizzabile sulla tastiera
+  const isNoteVisibleOnPiano = (note) => {
+    return pianoKeys.some(key => key.note === note);
+  };
+
+  // Funzione per trasporre tutte le note di un accordo di un'ottava più bassa
+  const transposeChordOctaveDown = (notes) => {
+    return notes.map(note => {
+      const noteName = note.slice(0, -1);
+      const octave = parseInt(note.slice(-1));
+      return noteName + (octave - 1);
+    });
+  };
+
+  // Crea l'accordo trasposto e lo adatta se non visualizzabile
+let chordNotes = [];
+if (originalChord) {
+  // Trova la fondamentale trasposta
+  const transposedRoot = transposeNote(originalChord.notes[0], transpositionSemitones);
+  const pianoNoteOrder = pianoKeys.map(key => key.note);
+  const rootName = transposedRoot.slice(0, -1);
+  // Trova la versione più bassa della fondamentale sulla tastiera
+  const lowestRoot = pianoNoteOrder.find(n => n.startsWith(rootName));
+  if (lowestRoot) {
+    const lowestOctave = parseInt(lowestRoot.slice(-1));
+    const rootOctave = parseInt(transposedRoot.slice(-1));
+    const octaveDiff = lowestOctave - rootOctave;
+    // Calcola la distanza in semitoni tra la fondamentale e le altre note
+    chordNotes = originalChord.notes.map((note, i) => {
+      const transposed = transposeNote(note, transpositionSemitones);
+      const noteName = transposed.slice(0, -1);
+      const noteOctave = parseInt(transposed.slice(-1));
+      let newOctave = noteOctave + octaveDiff;
+      let candidate = noteName + newOctave;
+      // Se la nota non è sulla tastiera, cerca la più bassa disponibile
+      if (!pianoNoteOrder.includes(candidate)) {
+        const candidates = pianoNoteOrder.filter(n => n.startsWith(noteName));
+        candidate = candidates.length > 0 ? candidates[0] : transposed;
+      }
+      return candidate;
+    });
+  } else {
+    // Se la fondamentale non è sulla tastiera, usa la trasposizione normale
+    chordNotes = originalChord.notes.map(note => transposeNote(note, transpositionSemitones));
+  }
+}
+const currentChord = originalChord ? {
+  ...originalChord,
+  notes: chordNotes
+} : null;
 
   // Funzione per verificare se un tasto è parte dell'accordo
   const isKeyInChord = (note) => {
@@ -147,14 +216,14 @@ const PianoChordApp = () => {
 
   // Funzione per ottenere la frequenza di una nota
   const getNoteFrequency = (note) => {
-    const noteMap = {
-      'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5,
-      'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11
+    const englishNoteMap = {
+      'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4, 'F': 5,
+      'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11
     };
     
     const noteName = note.slice(0, -1);
     const octave = parseInt(note.slice(-1));
-    const semitoneFromA4 = (octave - 4) * 12 + noteMap[noteName] - 9;
+    const semitoneFromA4 = (octave - 4) * 12 + englishNoteMap[noteName] - 9;
     return 440 * Math.pow(2, semitoneFromA4 / 12);
   };
 
@@ -406,18 +475,20 @@ const PianoChordApp = () => {
                   <div>
                     {(() => {
                       const transposed = getTransposedChordName(selectedChord, originalChord);
+                      // Rimuovo eventuali parentesi dal nome
+                      const cleanName = transposed.name.replace(/ *\( */g, "").replace(/ *\) */g, "");
                       return (
-                        <>
-                          <span className="font-medium text-teal-600">{transposed.symbol}</span>
-                          <span className="text-gray-600 ml-2">({transposed.name})</span>
-                        </>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-teal-700 text-lg">{transposed.symbol}</span>
+                          <strong className="text-lg text-gray-800">{cleanName}</strong>
+                        </div>
                       );
                     })()}
                   </div>
                   <div>
                     <span className="text-sm text-gray-800 font-medium">Note: </span>
                     <span className="font-mono bg-gray-100 px-2 py-1 rounded text-gray-900">
-                      {currentChord.notes.map(note => note.slice(0, -1)).join(' - ')}
+                      {currentChord.notes.map(note => convertNoteToItalian(note)).join(' - ')}
                     </span>
                   </div>
                   <div>
