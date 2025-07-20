@@ -476,7 +476,14 @@ const currentChord = originalChord ? {
                     {(() => {
                       const transposed = getTransposedChordName(selectedChord, originalChord);
                       // Rimuovo eventuali parentesi dal nome
-                      const cleanName = transposed.name.replace(/ *\( */g, "").replace(/ *\) */g, "");
+                      const cleanName = transposed.name
+  .replace(/ *\(.*?\) */g, " ") // rimuove le parentesi e aggiunge uno spazio
+  .replace(/([a-zàèéìòù])([A-Z])/g, "$1 $2") // spazio tra minuscola e maiuscola
+  .replace(/([a-zàèéìòù])([A-Z][a-z])/g, "$1 $2") // spazio tra minuscola e parola maiuscola
+  .replace(/([a-zA-Z])([0-9])/g, "$1 $2") // spazio tra lettere e numeri
+  .replace(/([0-9])([A-Z][a-z])/g, "$1 $2") // spazio tra numeri e parola
+  .replace(/  +/g, " ") // elimina spazi doppi
+  .trim();
                       return (
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-teal-700 text-lg">{transposed.symbol}</span>
